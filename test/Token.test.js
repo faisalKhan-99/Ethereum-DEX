@@ -5,7 +5,7 @@ require('chai').use(require('chai-as-promised')).should()
 import {tokens,EVM_REVERT} from './helpers'
 
 
-contract ('Token',([deployer,receiver])=>{ //here accounts are all the accounts in ganache
+contract ('Token',([deployer,receiver,exchange])=>{ //here accounts are all the accounts in ganache, add accounts in this array
 let token 
 const name = 'Rich Token'
 const symbol = 'RCH'
@@ -80,7 +80,7 @@ const totalSupply = tokens(1000000).toString()
 
 		})
 
-		it('emits a transfer event',async() =>{
+		it('emits a Transfer event',async() =>{
 			//result variable will help us find if the event occured or not
 			//console.log(result) //result contained info on event, receipt 
 			//console.log(result.logs)
@@ -110,5 +110,106 @@ const totalSupply = tokens(1000000).toString()
 			})
 		})
 
+	describe('approving tokens', ()=>{
+		let result
+		let amount
+		
+		beforeEach(async()=>{
+			amount = tokens(100)
+			result = await token.approve(exchange, amount, {from:deployer}) //approve this exchange to spend this amount
+		})
+
+		describe('success', ()=>{
+
+			it('allocates an allowance for delegated token spending on an exchange',async()=>{
+				//allowing a dex to manage my tokens
+				const allowance = await token.allowance(deployer,exchange)
+				allowance.toString().should.equal(amount.toString())
+			})
+			it('emits an Approval event',async() =>{
+			//result variable will help us find if the event occured or not
+			//console.log(result) //result contained info on event, receipt 
+			//console.log(result.logs)
+			const log = result.logs[0]
+			log.event.should.eq('Approval')
+			const event = log.args
+			event.owner.toString().should.eq(deployer,'owner is correct')
+			event.spender.toString().should.eq(exchange,'spender is correct')
+			event.value.toString().should.equal(amount.toString(),'value is correct') //checks if transfer was of tokens(100)
+		})
+		})
+
+		describe('failure', ()=>{
+			it('rejects invalid recipients',async()=>{
+				await token.approve(0x0,amount,{from:deployer}).should.be.rejected//0x0 is blank/invalid address
+			})
+		})
+		
+	})
+
+	describe('delegated token transfer',()=>{
+		let result
+		let amount
+
+		beforeEach(async() =>{
+			amount = tokens(100)
+			//approve before any of success cases
+			await token.approve(exchange,amount,{from:deployer}) //approving tokens to the exchange to facilitate transferFrom call
+		})
+
+		describe('success',()=>{
+			//put evrything in 'success' beacuse erc20 expect us to handle error in txn also'
+
+		beforeEach(async()=>{
+		
+		result = await token.transferFrom(deployer,receiver, amount, { from: exchange }) //using trasnferFrom with arg added, exchange is gonna do the transfer because approved
+	})
+
+		it('transfers tokens',async()=>{
+			let balanceOf
+
+			balanceOf = await token.balanceOf(deployer)
+			balanceOf.toString().should.equal(tokens(999900).toString())			
+			balanceOf = await token.balanceOf(receiver)
+			balanceOf.toString().should.equal(tokens(100).toString())
+			
+
+		})
+
+		it('allocates an allowance for delegated token spending on an exchange',async()=>{//so that our tokens dont go out in a loop (all to dex)
+				//allowing a dex to manage my tokens
+				const allowance = await token.allowance(deployer,exchange)
+				allowance.toString().should.equal('0')
+			})
+
+		it('emits a Transfer event',async() =>{
+			const log = result.logs[0]
+			log.event.should.eq('Transfer')
+			const event = log.args
+			event.from.toString().should.eq(deployer,'from value is correct')
+			event.to.toString().should.eq(receiver,'to value is correct')
+			event.value.toString().should.equal(amount.toString(),'value is correct') 
+		})
+		
+
+		describe('failure', () =>{
+			it('rejects insufficient balances',async()=>{
+				let invalidamount
+				invalidamount = tokens(10000000) //100 million which is greater than supply hence invalid
+				await token.transferFrom(deployer,receiver,invalidamount,{from: exchange}).should.be.rejectedWith(EVM_REVERT)
+				
+
+				
+				
+			})
+			it('rejects invalid recipients',async()=>{
+				await token.transferFrom(0x0,amount,{from:exchange}).should.be.rejected
+			})
+			})
+		})
+
+
+
 	
 	})
+})
