@@ -112,7 +112,7 @@ const feePercent = 10
 
 	})
 
-	describe('depositing', () =>{
+	describe('depositing tokens', () =>{
 		let result
 		let amount 
 
@@ -159,5 +159,62 @@ const feePercent = 10
 		})
 		
 		
+	})
+
+	describe('withDraw token',async()=>{
+		let result
+		let amount
+
+		describe('success',async()=>{
+
+			beforeEach(async()=>{
+				amount = tokens(10)
+				//deposit tokens first
+				await token.approve(exchange.address,amount,{from:user1})
+				await exchange.depositToken(token.address,amount,{from:user1})
+
+				///withdrawing tokens
+				result = await exchange.withdrawToken(token.address,amount,{from:user1})
+			})
+
+			it('withdraw token funds',async()=>{
+				const balance = await exchange.tokens(token.address,user1)
+				balance.toString().should.equal('0')
+			})
+			it('emits a Withdraw event',async() =>{
+			//result variable will help us find if the event occured or not
+			//console.log(result) //result contained info on event, receipt 
+			//console.log(result.logs)
+			const log = result.logs[0]
+			log.event.should.eq('Withdraw')
+			const event = log.args
+			event.token.toString().should.eq(token.address,'token address is correct')
+			event.user.toString().should.eq(user1,'user is correct')
+			event.amount.toString().should.equal(amount.toString(),'value is correct')
+			event.balance.toString().should.equal('0','balance is correct')
+			})
+			})
+		describe('failure',async()=>{
+
+			it('rejects ether withdraws',async()=>{
+				await exchange.withdrawToken(ETHER_ADDRESS,tokens(10),{from:user1}).should.be.rejectedWith(EVM_REVERT)
+			})
+			it('rejects withdraws for insufficient balances',async()=>{
+				await exchange.withdrawToken(token.address,tokens(10),{from:user1}).should.be.rejectedWith(EVM_REVERT)
+			
+			})
+
+		})
+	})
+
+	describe('checking balance',async () =>{
+		beforeEach(async()=>{
+			exchange.depositEther({from:user1, value: ether(1)})
+		})
+
+		it('return user balance', async()=>{
+			const result = await exchange.balanceOf(ETHER_ADDRESS,user1)
+			result.toString().should.equal(ether(1).toString())
+		})
 	})
 })
